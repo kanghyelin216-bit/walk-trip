@@ -1,0 +1,14 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>뚜벅이 여행 | 오늘은 어디를 가볼까요?</title>
+<link href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Noto+Sans+KR:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css"></head><body><main class="w">
+<div class="line" aria-hidden="true"><i></i><b></b><i></i><b></b><i></i></div>
+<p class="sm">차 없이, 걸어서 닿는 하루 코스</p>
+<h1>오늘은<br>어디를 가볼까요?</h1>
+<a class="btn o" href="random.html">🎰 랜덤 지역으로 떠나기</a>
+<a class="btn g" href="select.html">📍 지역 직접 고르기</a>
+<a class="btn" href="search.html" style="border-color:var(--g);color:var(--g)">🔎 지역 검색해서 내 코스 짜기</a>
+<a class="btn" href="history.html">🧳 나의 지난 여행 <span id="cnt"></span></a>
+<p class="sm" style="margin-top:26px">데이터 출처: 공공데이터포털 · 한국관광공사 국문 관광정보 서비스</p>
+</main><script src="config.js"></script><script src="common.js"></script>
+<script>const n=LS.get('hist',[]).length;if(n)$('#cnt').textContent=`(${n})`</script></body></html>

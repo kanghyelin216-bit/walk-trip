@@ -1,0 +1,110 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>지역 검색 | 뚜벅이 여행</title>
+<link href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Noto+Sans+KR:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css"></head><body><main class="w" style="padding-bottom:110px">
+<div class="top"><a href="index.html">← 메인</a></div>
+<h1>지역에서<br>가볼 곳 고르기</h1><p class="sm">지역(시·구·동·역 이름)을 검색하면 문화유산·관광지·지하철역·등산 등을 가나다순으로 보여줘요. 체크해서 나만의 코스를 짜보세요.</p>
+<form id="f" class="row"><input id="q" placeholder="예: 인천 부평구, 경주, 성수동" required><button class="btn g s">검색</button></form>
+<div id="cands" class="chips"></div><div id="info"></div>
+<div id="main" hidden>
+  <div class="chips" id="tabs"></div>
+  <div class="row" style="gap:8px"><input id="flt" placeholder="목록에서 이름 찾기"><label class="sm" style="white-space:nowrap;margin:0;align-self:center"><input type="checkbox" id="ph" checked style="width:auto"> 사진 있는 곳만</label></div>
+  <label class="sm" for="crad">'자동코스' 버튼의 코스 반경</label>
+  <select id="crad"><option value="1000">1km</option><option value="2000" selected>2km</option><option value="3000">3km</option></select>
+  <div id="list"></div>
+</div>
+<div id="warn"></div>
+</main>
+<div class="bar" id="bar" hidden><span id="cnt"></span><button class="btn o" data-a="open">코스 편집 ▲</button></div>
+<script src="config.js"></script><script src="common.js"></script>
+<script>
+const CAT=['관광지','문화유산','문화시설','등산·트레킹','지하철역','맛집','카페'];
+const HIK=/(산|봉)$|등산|둘레길|트레킹|산책로|숲길|올레|탐방|자락길/;
+let ALL=[],TAB='',REG=null,SEL=[],CANDS=[],VIEW=[];
+const key=r=>r.name+'|'+r.x.toFixed(4)+'|'+r.y.toFixed(4);
+async function geoRegion(q){
+  const r=await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=jsonv2&countrycodes=kr&limit=4&accept-language=ko`);
+  return(await r.json()).map(i=>{const[s,n,w,e]=i.boundingbox.map(Number);
+    return{name:i.name||i.display_name.split(',')[0],addr:i.display_name.split(',').slice(-3,-1).reverse().join(' ').trim(),x:+i.lon,y:+i.lat,rad:Math.min(20000,Math.max(1500,Math.round(meters({x:w,y:s},{x:e,y:n})/2)))}});
+}
+async function stations(c,r){ // 지하철·철도역: OpenStreetMap Overpass
+  const q=`[out:json][timeout:15];node["railway"="station"](around:${r},${c.y},${c.x});out 120;`;
+  const res=await fetch('https://overpass-api.de/api/interpreter',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'data='+encodeURIComponent(q)});
+  return(await res.json()).elements.filter(e=>/[가-힣]/.test(e.tags?.name||'')).map(e=>({name:e.tags.name.replace(/역?$/,'역'),addr:'',x:e.lon,y:e.lat,img:'',t:'지하철역',k:'station'}));
+}
+function cls(v,ct){
+  const hik=HIK.test(v.title)||v.cat3==='A01010400';
+  if(ct===39)return v.cat3==='A05020900'?'카페':'맛집';
+  if(ct===28)return hik?'등산·트레킹':null;
+  if(hik)return'등산·트레킹';
+  return ct===14?'문화시설':v.cat2==='A0201'?'문화유산':'관광지';
+}
+$('#f').onsubmit=async e=>{
+  e.preventDefault();const q=$('#q').value.trim();if(!q)return;
+  if(CONFIG.KEY.includes('여기에')){$('#info').innerHTML='<p class="err">config.js에 인증키를 넣어주세요.</p>';return}
+  $('#info').innerHTML='<p class="sm">지역을 찾는 중…</p>';
+  try{CANDS=await geoRegion(q)}catch(err){$('#info').innerHTML=`<p class="err">지역 검색 실패: ${esc(err.message)}</p>`;return}
+  if(!CANDS.length){$('#info').innerHTML=`<p class="err">지역을 찾지 못했어요. '인천 부평구'처럼 시·구 이름을 함께 적어보세요.</p>`;return}
+  $('#cands').innerHTML=CANDS.length>1?'<span class="sm" style="width:100%">혹시 이곳인가요?</span>'+CANDS.map((c,i)=>`<button data-c="${i}">${esc(c.name)} <small style="display:inline">${esc(c.addr)}</small></button>`).join(''):'';
+  loadRegion(0);
+};
+async function loadRegion(i){
+  REG=CANDS[i];const c=REG;
+  $('#info').innerHTML=`<div class="sum">📍 ${esc(c.name)} <small>${esc(c.addr)} · 반경 약 ${(c.rad/1000).toFixed(1)}km 안의 장소</small></div>`;
+  $('#main').hidden=true;$('#warn').innerHTML='<p class="sm">공공데이터에서 장소를 모으는 중…</p>';
+  const rs=await Promise.allSettled([near(c,12,100,c.rad),near(c,14,60,c.rad),near(c,28,60,c.rad),near(c,39,100,c.rad),stations(c,Math.min(c.rad,8000))]);
+  const nm=['관광지','문화시설','레포츠','맛집·카페','지하철역(OSM)'],cts=[12,14,28,39],seen=new Set();let warn='';ALL=[];
+  rs.forEach((r,i)=>{
+    if(r.status!=='fulfilled'){warn+=`<p class="sm">⚠ ${nm[i]} 불러오기 실패: ${esc(r.reason.message)}</p>`;return}
+    r.value.forEach(v=>{
+      const o=i===4?v:(t=>t&&{name:v.title,addr:v.addr1,x:+v.mapx,y:+v.mapy,img:(v.firstimage||'').replace('http://','https://'),t,k:t==='문화유산'?'heritage':'spot'})(cls(v,cts[i]));
+      if(o&&o.x&&!seen.has(key(o))){seen.add(key(o));ALL.push(o)}
+    });
+  });
+  $('#warn').innerHTML=warn;
+  TAB=CAT.find(t=>ALL.some(r=>r.t===t))||CAT[0];$('#main').hidden=false;draw();
+}
+function draw(){
+  const f=$('#flt').value.trim(),ph=$('#ph').checked,ok=r=>(!f||r.name.includes(f))&&(!ph||r.t==='지하철역'||r.img);
+  $('#tabs').innerHTML=CAT.map(t=>`<button data-t="${t}" class="${t===TAB?'on':''}">${t} ${ALL.filter(r=>r.t===t&&ok(r)).length}</button>`).join('');
+  VIEW=ALL.filter(r=>r.t===TAB&&ok(r)).sort((a,b)=>a.name.localeCompare(b.name,'ko')).slice(0,80);  // 가나다순
+  const auto=r=>'course.html?'+new URLSearchParams({m:'search',n:r.name,x:r.x,y:r.y,k:r.k,t:r.t,a:r.addr||'',rad:$('#crad').value});
+  $('#list').innerHTML=`<a class="btn g" href="${auto({name:REG.name,x:REG.x,y:REG.y,k:'place',t:'장소'})}">📍 이 지역 중심에서 자동 코스 짜기</a>`+
+   (VIEW.length?VIEW.map((r,i)=>`<label class="pl"><input type="checkbox" data-k="${i}" ${SEL.some(s=>key(s)===key(r))?'checked':''}>${r.img?`<img src="${esc(r.img)}" alt="" loading="lazy">`:''}<span><b>${esc(r.name)}</b><small>${esc(r.addr)||r.t}</small></span><a class="go" href="${auto(r)}">자동코스</a></label>`).join(''):'<p class="sm" style="margin-top:14px">이 분류에는 표시할 장소가 없어요. (사진 필터를 꺼보세요)</p>');
+  bar();
+}
+const bar=()=>{$('#bar').hidden=!SEL.length;$('#cnt').textContent=`선택한 곳 ${SEL.length}/8`};
+function tray(){
+  let d=$('#tray');if(!d){d=document.createElement('div');d.id='tray';d.className='md';document.body.append(d)}
+  d.innerHTML=`<div class="bx" style="text-align:left;max-height:86vh;overflow:auto"><h2>내 코스 (${SEL.length}곳)</h2><p class="sm">↑↓로 순서를 바꾸거나 '동선 최적화'를 눌러보세요.</p>
+  ${SEL.map((r,i)=>`<div class="tr"><span class="tg" style="background:${COL[r.t]}">${r.t}</span><b>${esc(r.name)}</b><button data-a="u${i}">↑</button><button data-a="d${i}">↓</button><button data-a="x${i}">✕</button></div>`).join('')||'<p class="sm">아직 고른 곳이 없어요.</p>'}
+  <button class="btn k" data-a="opt">🔀 동선 최적화 (총 이동거리 최소)</button><button class="btn g" data-a="go">이 순서로 코스 보기 →</button><button class="btn k" data-a="close">닫기</button></div>`;
+}
+function optimize(){ // 선택지 전체 순열 중 총 이동거리가 가장 짧은 순서 (최대 8곳 → 40,320가지)
+  let best=SEL,bd=1e12;
+  for(const q of perms(SEL)){let d=0;for(let i=1;i<q.length;i++)d+=meters(q[i-1],q[i]);if(d<bd){bd=d;best=q}}
+  SEL=best;
+}
+document.addEventListener('click',e=>{
+  const t=e.target.closest('[data-t]'),c=e.target.closest('[data-c]'),a=e.target.closest('[data-a]');
+  if(t){TAB=t.dataset.t;draw()}
+  if(c)loadRegion(+c.dataset.c);
+  if(a){const v=a.dataset.a,i=+v.slice(1);
+    if(v==='open'||v==='close'){v==='close'?$('#tray').remove():tray();return}
+    if(v[0]==='u'&&i>0)[SEL[i-1],SEL[i]]=[SEL[i],SEL[i-1]];
+    if(v[0]==='d'&&i<SEL.length-1)[SEL[i+1],SEL[i]]=[SEL[i],SEL[i+1]];
+    if(v[0]==='x')SEL.splice(i,1);
+    if(v==='opt')optimize();
+    if(v==='go'){if(SEL.length<2)return alert('2곳 이상 골라주세요.');
+      sessionStorage.setItem('custom',JSON.stringify(SEL.map(({name,addr,x,y,t,img})=>({name,addr,x,y,t,img}))));
+      location.href='course.html?m=custom&n='+encodeURIComponent((REG?REG.name+' ':'')+'나의 코스');return}
+    tray();draw();
+  }
+});
+document.addEventListener('change',e=>{
+  const k=e.target.dataset?.k;if(k===undefined)return;const r=VIEW[+k],i=SEL.findIndex(s=>key(s)===key(r));
+  if(e.target.checked){if(SEL.length>=8){e.target.checked=false;return alert('최대 8곳까지 고를 수 있어요.')}if(i<0)SEL.push(r)}else if(i>=0)SEL.splice(i,1);
+  bar();
+});
+$('#flt').oninput=draw;$('#ph').onchange=draw;$('#crad').onchange=()=>REG&&draw();
+</script></body></html>

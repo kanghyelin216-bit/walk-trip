@@ -1,0 +1,12 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>지역 선택 | 뚜벅이 여행</title>
+<link href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Noto+Sans+KR:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css"></head><body><main class="w">
+<div class="top"><a href="index.html">← 메인</a></div>
+<h1>어느 지역으로<br>갈까요?</h1><p class="sm">출발 거점 기준 도보 코스를 짜드려요.</p>
+<div class="grid" id="g"></div>
+</main><script src="config.js"></script><script src="common.js"></script>
+<script>
+$('#g').innerHTML=REGIONS.map((r,i)=>`<button class="btn" data-i="${i}">${esc(r.n)}<small>${esc(r.h)}</small></button>`).join('');
+$('#g').onclick=e=>{const b=e.target.closest('button');if(b)ask(+b.dataset.i,'select')};
+</script></body></html>

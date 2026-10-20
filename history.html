@@ -1,0 +1,21 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>나의 지난 여행 | 뚜벅이 여행</title>
+<link href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Noto+Sans+KR:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css"></head><body><main class="w">
+<div class="top"><a href="index.html">← 메인</a></div>
+<h1>나의 지난 여행</h1><div class="sum" id="stat" hidden></div><div id="list"></div>
+</main><script src="config.js"></script><script src="common.js"></script>
+<script>
+function draw(){
+  const H=LS.get('hist',[]);
+  if(!H.length){$('#stat').hidden=true;$('#list').innerHTML='<p class="err">아직 저장한 여행이 없어요.</p><a class="btn o" href="random.html">첫 여행 떠나기</a>';return}
+  const cnt={};H.forEach(h=>cnt[h.region]=(cnt[h.region]||0)+1);
+  const top=Object.entries(cnt).sort((a,b)=>b[1]-a[1])[0];
+  $('#stat').hidden=false;$('#stat').textContent=`총 ${H.length}번 · 누적 도보 ${(H.reduce((a,h)=>a+h.total,0)/1000).toFixed(1)}km · 가장 많이 간 곳: ${top[0]}`;
+  $('#list').innerHTML=H.map(h=>`<details><summary>${esc(h.region)} · ${new Date(h.id).toLocaleDateString('ko-KR')} ${h.mode==='random'?'🎰':'📍'}</summary>
+  <small>${esc(h.hub)} 출발 · 도보 ${(h.total/1000).toFixed(1)}km · ${h.mins}분</small><ol>${h.stops.map(s=>`<li><span class="tg" style="background:${COL[s.t]}">${s.t}</span>${esc(s.name)}</li>`).join('')}</ol>
+  <button class="btn k" data-id="${h.id}" style="padding:8px;margin-top:10px">삭제</button></details>`).join('');
+}
+$('#list').onclick=e=>{const id=e.target.dataset?.id;if(id){LS.set('hist',LS.get('hist',[]).filter(h=>h.id!=id));draw()}};
+draw();
+</script></body></html>
