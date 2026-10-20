@@ -25,7 +25,7 @@ const mkCustom=s=>{let cur=null,total=0;const stops=s.map(q=>{const leg=cur?Math
   try{C=await buildCourse(R,rad);render()}
   catch(e){out.innerHTML=`<p class="err"><b>코스를 만들지 못했어요.</b><br>${esc(e.message)}<br><small>인증키 활용신청 승인 여부, CORS/https 설정을 확인하세요.</small></p><a class="btn" href="javascript:location.reload()">다시 시도</a>`}
 })();
-const pre=i=>i?C.stops[i-1]:(R.fixed?null:{name:R.h,x:R.x,y:R.y});
+function pre(i){return i?C.stops[i-1]:(R.fixed?null:{name:R.h,x:R.x,y:R.y})}
 function legInner(s,a){
   if(!a)return '출발';
   if(!s.tm)return '⏳ 이동수단 찾는 중…';
