@@ -96,6 +96,19 @@ async function buildCourse(R,rad=2500){
   return{stops,total,mins:Math.round(total/67)};
 }
 
+
+// ===== Overpass(OSM 역 조회): 공개 서버가 자주 혼잡(502 등)해서 미러 3곳을 순서대로 시도 =====
+const OVP=['https://overpass-api.de/api/interpreter','https://overpass.kumi.systems/api/interpreter','https://overpass.private.coffee/api/interpreter'];
+async function overpass(q){
+  for(const u of OVP){
+    try{
+      const r=await fetch(u,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'data='+encodeURIComponent(q)});
+      if(!r.ok)throw 0;const t=await r.text();if(t.trim()[0]!=='{')throw 0;return JSON.parse(t);
+    }catch{}
+  }
+  throw new Error('지하철역 조회 서버(Overpass)가 혼잡해요. 잠시 후 다시 검색해 주세요');
+}
+
 // ===== 구간 이동수단 판단 =====
 // ① 도보 1km 이하 → 도보
 // ② 국토교통부 TAGO 버스정류소정보 API(JSON): 두 지점 근처 정류소 → 각 정류소 경유노선 → 공통 노선번호가 있으면 직행 버스 안내
@@ -116,8 +129,7 @@ async function busBetween(a,b){
 }
 async function nearStation(p,r=1200){
   const q=`[out:json][timeout:10];node["railway"="station"](around:${r},${p.y},${p.x});out 10;`;
-  const res=await fetch('https://overpass-api.de/api/interpreter',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'data='+encodeURIComponent(q)});
-  const l=(await res.json()).elements.filter(e=>/[가-힣]/.test(e.tags?.name||'')).map(e=>({n:e.tags.name.replace(/역?$/,'역'),d:meters(p,{x:e.lon,y:e.lat})}));
+  const l=(await overpass(q)).elements.filter(e=>/[가-힣]/.test(e.tags?.name||'')).map(e=>({n:e.tags.name.replace(/역?$/,'역'),d:meters(p,{x:e.lon,y:e.lat})}));
   return l.sort((a,b)=>a.d-b.d)[0]?.n||null;
 }
 const kakaoRoute=(a,b)=>`https://map.kakao.com/link/by/traffic/${encodeURIComponent(a.name)},${a.y},${a.x}/${encodeURIComponent(b.name)},${b.y},${b.x}`;

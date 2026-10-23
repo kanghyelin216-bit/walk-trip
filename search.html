@@ -27,10 +27,11 @@ async function geoRegion(q){
   return(await r.json()).map(i=>{const[s,n,w,e]=i.boundingbox.map(Number);
     return{name:i.name||i.display_name.split(',')[0],addr:i.display_name.split(',').slice(-3,-1).reverse().join(' ').trim(),x:+i.lon,y:+i.lat,rad:Math.min(20000,Math.max(1500,Math.round(meters({x:w,y:s},{x:e,y:n})/2)))}});
 }
-async function stations(c,r){ // 지하철·철도역: OpenStreetMap Overpass
+async function stations(c,r){ // 지하철·철도역: OpenStreetMap Overpass (지역별로 localStorage에 캐시)
+  const ck=`${c.x.toFixed(2)},${c.y.toFixed(2)},${r}`,cache=LS.get('stc',{});if(cache[ck])return cache[ck];
   const q=`[out:json][timeout:15];node["railway"="station"](around:${r},${c.y},${c.x});out 120;`;
-  const res=await fetch('https://overpass-api.de/api/interpreter',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'data='+encodeURIComponent(q)});
-  return(await res.json()).elements.filter(e=>/[가-힣]/.test(e.tags?.name||'')).map(e=>({name:e.tags.name.replace(/역?$/,'역'),addr:'',x:e.lon,y:e.lat,img:'',t:'지하철역',k:'station'}));
+  const list=(await overpass(q)).elements.filter(e=>/[가-힣]/.test(e.tags?.name||'')).map(e=>({name:e.tags.name.replace(/역?$/,'역'),addr:'',x:e.lon,y:e.lat,img:'',t:'지하철역',k:'station'}));
+  cache[ck]=list;LS.set('stc',cache);return list;
 }
 function cls(v,ct){
   const hik=HIK.test(v.title)||v.cat3==='A01010400';
