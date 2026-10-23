@@ -32,7 +32,7 @@ function legInner(s,a){
   return `${s.ic} ${s.lab} · 약 ${s.tm}분 · ${s.leg}m${s.det?`<small>${esc(s.det)}</small>`:''}${s.ic==='🚶'?'':` <a href="${kakaoRoute(a,s)}" target="_blank" rel="noopener">카카오맵 길찾기</a>`}`;
 }
 function refresh(){
-  const mins=C.stops.reduce((a,s)=>a+(s.tm||Math.round(s.leg/67)),0);
+  const mins=C.stops.reduce((a,s)=>a+(s.tm||(s.leg>1000?12+Math.round(s.leg/350):Math.round(s.leg/67))),0);  // 아직 조회 전인 먼 구간은 도보가 아니라 대중교통 추정치로 계산
   $('#sum').textContent=`총 ${C.stops.length}곳 · 이동 거리 약 ${(C.total/1000).toFixed(1)}km · 이동 시간 약 ${mins}분`;
   C.mins=mins;
   let h=R.fixed?'':`<span class="sp">${esc(R.h)}</span>`;
@@ -50,10 +50,12 @@ function render(){
   <button class="btn g" id="save">✅ 이 코스로 저장</button>${mode==='custom'?'<button class="btn k" onclick="history.back()">✏️ 코스 수정하기</button>':'<button class="btn k" onclick="location.reload()">🔄 코스 다시 짜기</button>'}`;
   out.innerHTML=h;refresh();
   const m=L.map('map'),pts=[...(R.fixed?[]:[[R.y,R.x]]),...C.stops.map(s=>[s.y,s.x])];
-  // OSM 공식 타일은 Referer가 없거나 사용정책에 안 맞으면 403으로 막혀서, 무료 CARTO 타일로 교체
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',{subdomains:'abcd',maxZoom:19,referrerPolicy:'origin',attribution:'© OpenStreetMap contributors © CARTO'}).addTo(m);
+  // CARTO 무료 타일은 2026년 8월 말부터 API 키가 필요해져서(키가 없으면 'API KEY REQUIRED' 워터마크), 키 없이 쓰는 Esri 타일을 기본으로 사용
+  const esri=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,attribution:'Tiles © Esri'});
+  const osm=L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,referrerPolicy:'origin',attribution:'© OpenStreetMap contributors'});
+  esri.addTo(m);L.control.layers({'지도 (Esri)':esri,'지도 (OpenStreetMap)':osm}).addTo(m);
   const lab=pts.map((_,i)=>R.fixed?String(i+1):(i?String(i):'출'));  // 번호 마커: 방문 순서가 한눈에 보이게
-  pts.forEach((q,i)=>L.marker(q,{icon:L.divIcon({className:'',iconSize:[28,28],iconAnchor:[14,14],html:`<div class="mk" style="background:${i===0&&!R.fixed?'#14231D':COL[C.stops[R.fixed?i:i-1].t]||'#14231D'}">${lab[i]}</div>`})}).addTo(m)
+  pts.forEach((q,i)=>L.marker(q,{icon:L.divIcon({className:'',iconSize:[28,28],iconAnchor:[14,14],html:`<div class="mk" style="width:28px;height:28px;border-radius:50%;color:#fff;font:700 13px/24px sans-serif;text-align:center;border:2px solid #fff;box-shadow:0 0 0 2px #14231D;background:${i===0&&!R.fixed?'#14231D':COL[C.stops[R.fixed?i:i-1].t]||'#14231D'}">${lab[i]}</div>`})}).addTo(m)
     .bindPopup(esc(R.fixed?C.stops[i].name:(i?C.stops[i-1].name:R.h))));
   m.fitBounds(pts,{padding:[30,30]});
   // 구간별로 점선(직선)을 먼저 그리고, 도보 경로(OSM 도보 라우팅)를 받으면 실제 길을 따라가는 실선으로 교체
