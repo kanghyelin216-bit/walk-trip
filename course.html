@@ -1,16 +1,16 @@
 <!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="origin">
 <title>뚜벅이 코스</title>
 <link href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Noto+Sans+KR:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@5.24.0/dist/maplibre-gl.css">
 <link rel="stylesheet" href="style.css"></head><body><main class="w">
 <div class="top"><a href="index.html">← 메인</a><a href="history.html">나의 지난 여행</a></div>
 <h1 id="ttl">코스 만드는 중…</h1><p class="sm" id="hub"></p>
 <div id="out"><p class="sm">공공데이터에서 가까운 관광지·맛집·카페를 찾고 있어요…</p></div>
 </main><script src="config.js"></script><script src="common.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/maplibre-gl@5.24.0/dist/maplibre-gl.js"></script>
 <script>
 const p=new URLSearchParams(location.search),mode=p.get('m')||'select',out=$('#out'),k=p.get('k'),rad=+p.get('rad')||2500;
-let R,C;
+let R,C,MAP=null,userView=false;
 if(mode==='custom'){const s=JSON.parse(sessionStorage.getItem('custom')||'[]');if(s.length)R={n:p.get('n')||'나의 코스',h:'',x:s[0].x,y:s[0].y,fixed:1,custom:s}}
 else if(mode==='search'){const n=p.get('n'),x=+p.get('x'),y=+p.get('y');
   if(n&&x&&y)R={n,h:n+' 일대',x,y,fixed:(k==='spot'||k==='heritage')?{id:'c',t:p.get('t')||(k==='heritage'?'문화유산':'관광지'),name:n,addr:p.get('a')||'',x,y,leg:0}:null}}
@@ -19,7 +19,7 @@ if(!R)location.replace('index.html');
 const mkCustom=s=>{let cur=null,total=0;const stops=s.map(q=>{const leg=cur?Math.round(meters(cur,q)*1.3):0;cur=q;total+=leg;return{...q,leg}});return{stops,total}};
 (async()=>{
   $('#ttl').textContent=mode==='custom'?R.n:`${R.n} 뚜벅이 코스`;
-  $('#hub').innerHTML=mode==='custom'?'직접 고른 장소로 만든 코스예요.':`출발 거점: ${esc(R.h)} · <a href="${kakao(R.h,R.y,R.x)}" target="_blank" rel="noopener">거점까지 대중교통 길찾기</a>`;
+  $('#hub').innerHTML=mode==='custom'?'직접 고른 장소로 만든 코스예요.':`출발 거점: ${esc(R.h)} · <a href="${kakaoLink(R.h,R.y,R.x)}" target="_blank" rel="noopener">거점까지 대중교통 길찾기</a>`;
   if(mode==='custom'){C=mkCustom(R.custom);render();return}
   if(CONFIG.KEY.includes('여기에')){out.innerHTML='<p class="err">config.js에 공공데이터포털 인증키를 넣어주세요.</p>';return}
   try{C=await buildCourse(R,rad);render()}
@@ -41,31 +41,69 @@ function refresh(){
 }
 function render(){
   C.stops.forEach(s=>{if(s.leg&&s.leg<=1000){s.ic='🚶';s.lab='도보';s.tm=Math.max(1,Math.round(s.leg/67))}});
-  let h=`<div class="sum" id="sum"></div><div id="map"></div>`;
+  let h=`<div class="sum" id="sum"></div><div style="display:flex;gap:8px;margin-top:14px"><button id="mm" type="button" style="flex:1;border:2px solid #14231D;background:#14231D;color:#fff;border-radius:99px;padding:6px;font:inherit;font-weight:600;cursor:pointer">🗺 지도</button><button id="ms" type="button" style="flex:1;border:2px solid #14231D;background:#fff;color:#14231D;border-radius:99px;padding:6px;font:inherit;font-weight:600;cursor:pointer">📍 약도</button></div>
+  <div id="map"></div><div id="sk" hidden style="border:2px solid #14231D;border-radius:14px;background:#fff;margin:18px 0;overflow:hidden"></div><p class="sm" id="mn"></p>`;
   if(!R.fixed)h+=`<div class="st"><i class="dot" style="background:var(--ink)">출</i><b>${esc(R.h)}</b><small>여기서 출발</small></div>`;
   C.stops.forEach((s,i)=>{h+=`<div class="leg" id="lg${i}">${legInner(s,pre(i))}</div>
   <div class="st"><i class="dot" style="background:${COL[s.t]||'#14231D'}">${i+1}</i><div class="cd">${s.img?`<img src="${esc(s.img)}" alt="" loading="lazy">`:''}
-  <div><span class="tg" style="background:${COL[s.t]||'#14231D'}">${s.t}</span><b>${esc(s.name)}</b><small>${esc(s.addr)}</small><a href="${kakao(s.name,s.y,s.x)}" target="_blank" rel="noopener">길찾기</a></div></div></div>`});
+  <div><span class="tg" style="background:${COL[s.t]||'#14231D'}">${s.t}</span><b>${esc(s.name)}</b><small>${esc(s.addr)}</small><a href="${kakaoLink(s.name,s.y,s.x)}" target="_blank" rel="noopener">길찾기</a></div></div></div>`});
   h+=`<h2 style="margin:26px 0 10px">📍 정류장 노선도</h2><div class="chain" id="chain"></div><p class="sm" style="margin-top:6px">이동 시간은 추정치예요. 버스는 정류소 경유노선 기준이라 방향·배차는 카카오맵에서 확인하세요.</p>
   <button class="btn g" id="save">✅ 이 코스로 저장</button>${mode==='custom'?'<button class="btn k" onclick="history.back()">✏️ 코스 수정하기</button>':'<button class="btn k" onclick="location.reload()">🔄 코스 다시 짜기</button>'}`;
   out.innerHTML=h;refresh();
-  const m=L.map('map'),pts=[...(R.fixed?[]:[[R.y,R.x]]),...C.stops.map(s=>[s.y,s.x])];
-  // CARTO 무료 타일은 2026년 8월 말부터 API 키가 필요해져서(키가 없으면 'API KEY REQUIRED' 워터마크), 키 없이 쓰는 Esri 타일을 기본으로 사용
-  const esri=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,attribution:'Tiles © Esri'});
-  const osm=L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,referrerPolicy:'origin',attribution:'© OpenStreetMap contributors'});
-  esri.addTo(m);L.control.layers({'지도 (Esri)':esri,'지도 (OpenStreetMap)':osm}).addTo(m);
-  const lab=pts.map((_,i)=>R.fixed?String(i+1):(i?String(i):'출'));  // 번호 마커: 방문 순서가 한눈에 보이게
-  pts.forEach((q,i)=>L.marker(q,{icon:L.divIcon({className:'',iconSize:[28,28],iconAnchor:[14,14],html:`<div class="mk" style="width:28px;height:28px;border-radius:50%;color:#fff;font:700 13px/24px sans-serif;text-align:center;border:2px solid #fff;box-shadow:0 0 0 2px #14231D;background:${i===0&&!R.fixed?'#14231D':COL[C.stops[R.fixed?i:i-1].t]||'#14231D'}">${lab[i]}</div>`})}).addTo(m)
-    .bindPopup(esc(R.fixed?C.stops[i].name:(i?C.stops[i-1].name:R.h))));
-  m.fitBounds(pts,{padding:[30,30]});
-  // 구간별로 점선(직선)을 먼저 그리고, 도보 경로(OSM 도보 라우팅)를 받으면 실제 길을 따라가는 실선으로 교체
-  pts.slice(1).forEach(async(q,i)=>{const p0=pts[i],ln=L.polyline([p0,q],{color:'#14231D',weight:3,dashArray:'6 8'}).addTo(m);
-    try{const r=await fetch(`https://routing.openstreetmap.de/routed-foot/route/v1/driving/${p0[1]},${p0[0]};${q[1]},${q[0]}?overview=full&geometries=geojson`);
-      const g=(await r.json()).routes?.[0]?.geometry?.coordinates;if(g){m.removeLayer(ln);L.polyline(g.map(c=>[c[1],c[0]]),{color:'#14231D',weight:4}).addTo(m)}}catch{}});
+  drawMap();
   $('#save').onclick=e=>{const hist=LS.get('hist',[]);
     hist.unshift({id:Date.now(),region:R.n,hub:R.h||'직접 선택',mode,total:C.total,mins:C.mins,stops:C.stops.map(s=>({name:s.name,t:s.t,addr:s.addr,leg:s.leg}))});
     LS.set('hist',hist);e.target.textContent='저장됐어요! 나의 지난 여행에서 볼 수 있어요';e.target.disabled=true};
   transit();
+}
+// ===== 지도: OpenFreeMap(키·도메인 등록 불필요) + MapLibre. 실패하면 약도(SVG)로 자동 전환 =====
+function mapPts(){return[...(R.fixed?[]:[[R.y,R.x]]),...C.stops.map(s=>[s.y,s.x])]}
+function mkHTML(i){  // 방문 순서 번호 마커 (출발은 '출')
+  const lab=R.fixed?String(i+1):(i?String(i):'출'),col=(i===0&&!R.fixed)?'#14231D':(COL[C.stops[R.fixed?i:i-1].t]||'#14231D');
+  return`<div style="width:28px;height:28px;border-radius:50%;color:#fff;font:700 13px/24px sans-serif;text-align:center;border:2px solid #fff;box-shadow:0 0 0 2px #14231D;background:${col}">${lab}</div>`;
+}
+async function footRoute(a,b){  // OSM 도보 라우팅: 실제 길을 따라가는 좌표 [lat,lng]
+  const r=await fetch(`https://routing.openstreetmap.de/routed-foot/route/v1/driving/${a[1]},${a[0]};${b[1]},${b[0]}?overview=full&geometries=geojson`);
+  const g=(await r.json()).routes?.[0]?.geometry?.coordinates;return g&&g.map(c=>[c[1],c[0]]);
+}
+function schematic(pts){  // 지도 서버 없이 좌표만으로 그리는 약도
+  const W=560,H=300,P=46,xs=pts.map(p=>p[1]),ys=pts.map(p=>p[0]),x0=Math.min(...xs),y0=Math.min(...ys),k=Math.cos((y0+Math.max(...ys))/2*Math.PI/180);
+  const dx=Math.max((Math.max(...xs)-x0)*k,1e-6),dy=Math.max(Math.max(...ys)-y0,1e-6),sc=Math.min((W-2*P)/dx,(H-2*P)/dy),cx=(W-dx*sc)/2,cy=(H-dy*sc)/2;
+  const X=p=>cx+(p[1]-x0)*k*sc,Y=p=>H-(cy+(p[0]-y0)*sc),nm=i=>R.fixed?C.stops[i].name:(i?C.stops[i-1].name:R.h);
+  return`<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="코스 약도"><defs><pattern id="gr" width="28" height="28" patternUnits="userSpaceOnUse"><path d="M28 0H0V28" fill="none" stroke="#D3DCE8" stroke-width="1"/></pattern></defs><rect width="${W}" height="${H}" fill="url(#gr)"/>
+  <polyline points="${pts.map(p=>X(p)+','+Y(p)).join(' ')}" fill="none" stroke="#14231D" stroke-width="3" stroke-dasharray="7 7" stroke-linejoin="round"/>
+  ${pts.map((p,i)=>{const lab=R.fixed?i+1:(i?i:'출'),col=(i===0&&!R.fixed)?'#14231D':(COL[C.stops[R.fixed?i:i-1].t]||'#14231D'),n=nm(i);
+    return`<circle cx="${X(p)}" cy="${Y(p)}" r="13" fill="${col}" stroke="#fff" stroke-width="2.5"/><text x="${X(p)}" y="${Y(p)+4.5}" text-anchor="middle" fill="#fff" font-size="13" font-weight="700">${lab}</text><text x="${X(p)}" y="${Y(p)-19}" text-anchor="middle" font-size="12" font-weight="600" fill="#14231D" stroke="#fff" stroke-width="3.5" paint-order="stroke">${esc(n.length>9?n.slice(0,9)+'…':n)}</text>`}).join('')}</svg>`;
+}
+function view(m,byUser){
+  if(byUser)userView=true;
+  $('#map').hidden=m!=='map';$('#sk').hidden=m!=='sk';
+  const on=(b,v)=>{b.style.background=v?'#14231D':'#fff';b.style.color=v?'#fff':'#14231D'};on($('#mm'),m==='map');on($('#ms'),m==='sk');
+  if(m==='map'&&MAP)MAP.resize();
+}
+function drawMap(){
+  const pts=mapPts();
+  $('#sk').innerHTML=schematic(pts);
+  $('#mm').onclick=()=>view('map',true);$('#ms').onclick=()=>view('sk',true);
+  const fail=msg=>{$('#mn').textContent=msg+' 대신 약도(위치 관계만 그린 그림)로 보여드려요.';if(!userView)view('sk')};
+  let webgl=false;try{const c=document.createElement('canvas');webgl=!!(c.getContext('webgl2')||c.getContext('webgl'))}catch{}
+  if(!window.maplibregl||!webgl)return fail('지도를 불러올 수 없어요.');
+  let ok=false;
+  MAP=new maplibregl.Map({container:'map',style:'https://tiles.openfreemap.org/styles/liberty',center:[pts[0][1],pts[0][0]],zoom:14});
+  MAP.addControl(new maplibregl.NavigationControl({showCompass:false}),'top-right');
+  MAP.on('load',()=>{
+    ok=true;if(!userView)view('map');
+    const lngs=pts.map(p=>p[1]),lats=pts.map(p=>p[0]);
+    MAP.fitBounds([[Math.min(...lngs),Math.min(...lats)],[Math.max(...lngs),Math.max(...lats)]],{padding:50,maxZoom:16,duration:0});
+    pts.forEach((p,i)=>{const el=document.createElement('div');el.innerHTML=mkHTML(i);new maplibregl.Marker({element:el.firstChild}).setLngLat([p[1],p[0]]).addTo(MAP)});
+    pts.slice(1).forEach(async(q,i)=>{
+      const id='leg'+i,gj=c=>({type:'Feature',geometry:{type:'LineString',coordinates:c}});
+      MAP.addSource(id,{type:'geojson',data:gj([[pts[i][1],pts[i][0]],[q[1],q[0]]])});
+      MAP.addLayer({id,type:'line',source:id,layout:{'line-join':'round'},paint:{'line-color':'#14231D','line-width':3,'line-dasharray':[2,2]}});
+      try{const g=await footRoute(pts[i],q);if(g){MAP.getSource(id).setData(gj(g.map(c=>[c[1],c[0]])));MAP.setPaintProperty(id,'line-width',5);MAP.setPaintProperty(id,'line-dasharray',[1,0])}}catch{}});
+    $('#mn').textContent='지도: OpenFreeMap · © OpenStreetMap contributors · 안 보이면 "약도" 버튼을 눌러보세요.';
+  });
+  setTimeout(()=>{if(!ok)fail('지도 서버에 연결하지 못했어요.')},8000);
 }
 async function transit(){  // 1km 초과 구간만 대중교통 조회 (순차 호출로 API 부담 최소화)
   for(let i=0;i<C.stops.length;i++){
