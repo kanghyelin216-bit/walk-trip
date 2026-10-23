@@ -48,3 +48,5 @@ label.sm{margin:12px 0 4px}
 .sp{border:2.5px solid var(--ink);border-radius:99px;padding:2px 12px;font-weight:700;font-size:.88rem}
 .cn{font-size:.74rem;color:var(--mut);padding:0 2px;white-space:nowrap}
 .leg small{display:block}.leg a{font-size:.78rem}
+
+.mk{width:28px;height:28px;border-radius:50%;color:#fff;font:700 13px/24px 'Noto Sans KR',sans-serif;text-align:center;border:2px solid #fff;box-shadow:0 0 0 2px #14231D}
