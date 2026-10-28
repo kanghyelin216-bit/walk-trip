@@ -12,7 +12,7 @@ const COL={관광지:'#0A8F5B',문화유산:'#A8691D',맛집:'#F26B21',카페:'#
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const LS={get(k,d){try{return JSON.parse(localStorage.getItem(k))??d}catch{return d}},set(k,v){localStorage.setItem(k,JSON.stringify(v))}};
-const kakao=(n,y,x)=>`https://map.kakao.com/link/to/${encodeURIComponent(n)},${y},${x}`;
+const kakaoLink=(n,y,x)=>`https://map.kakao.com/link/to/${encodeURIComponent(n)},${y},${x}`;
 
 // ===== 16회 무중복 '가방(bag)' 추첨: 16개를 섞어 하나씩 뽑고, 비면 다시 채움 (localStorage 유지) =====
 function bagLeft(){return LS.get('bag',[]).length}

@@ -19,7 +19,7 @@ if(!R)location.replace('index.html');
 const mkCustom=s=>{let cur=null,total=0;const stops=s.map(q=>{const leg=cur?Math.round(meters(cur,q)*1.3):0;cur=q;total+=leg;return{...q,leg}});return{stops,total}};
 (async()=>{
   $('#ttl').textContent=mode==='custom'?R.n:`${R.n} 뚜벅이 코스`;
-  $('#hub').innerHTML=mode==='custom'?'직접 고른 장소로 만든 코스예요.':`출발 거점: ${esc(R.h)} · <a href="${kakaoLink(R.h,R.y,R.x)}" target="_blank" rel="noopener">거점까지 대중교통 길찾기</a>`;
+  $('#hub').innerHTML=mode==='custom'?'직접 고른 장소로 만든 코스예요.':`출발 거점: ${esc(R.h)} · <a href="${mapLink(R.h,R.y,R.x)}" target="_blank" rel="noopener">거점까지 대중교통 길찾기</a>`;
   if(mode==='custom'){C=mkCustom(R.custom);render();return}
   if(CONFIG.KEY.includes('여기에')){out.innerHTML='<p class="err">config.js에 공공데이터포털 인증키를 넣어주세요.</p>';return}
   try{C=await buildCourse(R,rad);render()}
@@ -46,7 +46,7 @@ function render(){
   if(!R.fixed)h+=`<div class="st"><i class="dot" style="background:var(--ink)">출</i><b>${esc(R.h)}</b><small>여기서 출발</small></div>`;
   C.stops.forEach((s,i)=>{h+=`<div class="leg" id="lg${i}">${legInner(s,pre(i))}</div>
   <div class="st"><i class="dot" style="background:${COL[s.t]||'#14231D'}">${i+1}</i><div class="cd">${s.img?`<img src="${esc(s.img)}" alt="" loading="lazy">`:''}
-  <div><span class="tg" style="background:${COL[s.t]||'#14231D'}">${s.t}</span><b>${esc(s.name)}</b><small>${esc(s.addr)}</small><a href="${kakaoLink(s.name,s.y,s.x)}" target="_blank" rel="noopener">길찾기</a></div></div></div>`});
+  <div><span class="tg" style="background:${COL[s.t]||'#14231D'}">${s.t}</span><b>${esc(s.name)}</b><small>${esc(s.addr)}</small><a href="${mapLink(s.name,s.y,s.x)}" target="_blank" rel="noopener">길찾기</a></div></div></div>`});
   h+=`<h2 style="margin:26px 0 10px">📍 정류장 노선도</h2><div class="chain" id="chain"></div><p class="sm" style="margin-top:6px">이동 시간은 추정치예요. 버스는 정류소 경유노선 기준이라 방향·배차는 카카오맵에서 확인하세요.</p>
   <button class="btn g" id="save">✅ 이 코스로 저장</button>${mode==='custom'?'<button class="btn k" onclick="history.back()">✏️ 코스 수정하기</button>':'<button class="btn k" onclick="location.reload()">🔄 코스 다시 짜기</button>'}`;
   out.innerHTML=h;refresh();
@@ -57,6 +57,7 @@ function render(){
   transit();
 }
 // ===== 지도: OpenFreeMap(키·도메인 등록 불필요) + MapLibre. 실패하면 약도(SVG)로 자동 전환 =====
+function mapLink(n,y,x){return`https://map.kakao.com/link/to/${encodeURIComponent(n)},${y},${x}`}
 function mapPts(){return[...(R.fixed?[]:[[R.y,R.x]]),...C.stops.map(s=>[s.y,s.x])]}
 function mkHTML(i){  // 방문 순서 번호 마커 (출발은 '출')
   const lab=R.fixed?String(i+1):(i?String(i):'출'),col=(i===0&&!R.fixed)?'#14231D':(COL[C.stops[R.fixed?i:i-1].t]||'#14231D');
