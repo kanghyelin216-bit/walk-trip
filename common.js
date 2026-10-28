@@ -34,8 +34,8 @@ function ask(i,mode){
 // ===== 공공데이터 API: 한국관광공사 TourAPI 위치기반 조회 (JSON) =====
 async function tour(op,params){
   const q=new URLSearchParams({serviceKey:CONFIG.KEY,MobileOS:'ETC',MobileApp:'WalkTrip',_type:'json',...params});
-  const res=await fetch(`${CONFIG.BASE}/${op}?${q}`);
-  if(!res.ok)throw new Error('HTTP '+res.status);
+  const res=await fetchRetry(`${CONFIG.BASE}/${op}?${q}`);
+  if(!res.ok)throw new Error('HTTP '+res.status+(res.status>=500?' · 공공데이터 서버가 일시적으로 응답하지 않아요. 잠시 후 다시 시도해 주세요':''));
   const j=await res.json();
   const h=j.response?.header;if(h&&h.resultCode!=='0000')throw new Error(h.resultMsg);
   const it=j.response?.body?.items?.item;return it?[].concat(it):[];
@@ -115,7 +115,7 @@ async function overpass(q){
 // ③ 없으면 OSM으로 근처 지하철·철도역을 찾아 역 간 이동 안내, ④ 그것도 없으면 일반 '대중교통'(카카오맵 링크)
 const TB='https://apis.data.go.kr/1613000/BusSttnInfoInqireService';
 async function pub(u,p){
-  const r=await fetch(`${u}?${new URLSearchParams({serviceKey:CONFIG.KEY,_type:'json',...p})}`);
+  const r=await fetchRetry(`${u}?${new URLSearchParams({serviceKey:CONFIG.KEY,_type:'json',...p})}`);
   if(!r.ok)throw new Error('HTTP '+r.status);
   const it=(await r.json()).response?.body?.items?.item;return it?[].concat(it):[];
 }
@@ -139,4 +139,12 @@ async function legTransit(a,b){
   try{const k=await busBetween(a,b);if(k)return{ic:'🚌',lab:k.no+'번 버스',min:11+Math.round(w/300),det:`${k.from} 승차 → ${k.to} 하차 (방향은 카카오맵 확인)`}}catch{}
   try{const [s1,s2]=await Promise.all([nearStation(a),nearStation(b)]);if(s1&&s2&&s1!==s2)return{ic:'🚇',lab:'지하철·철도',min:14+Math.round(w/580),det:`${s1} → ${s2}`}}catch{}
   return{ic:'🚌🚇',lab:'대중교통',min:12+Math.round(w/350),det:'노선은 카카오맵에서 확인'};
+}
+
+// 서버 오류(5xx)·네트워크 오류는 잠깐 쉬었다가 최대 2번 더 시도 (공공데이터 게이트웨이가 가끔 502를 돌려줌)
+async function fetchRetry(url,n=2){
+  for(let i=0;;i++){
+    try{const r=await fetch(url);if(r.status>=500&&i<n){await new Promise(s=>setTimeout(s,700*(i+1)));continue}return r}
+    catch(e){if(i>=n)throw e;await new Promise(s=>setTimeout(s,700*(i+1)))}
+  }
 }
